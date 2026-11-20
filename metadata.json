@@ -1,0 +1,6 @@
+{
+  "name": "FlowForge AI",
+  "description": "Multi-tenant AI automation SaaS platform with RAG knowledge agents, real-time WebSocket chat, workflow engine, CRM integrations, and Stripe billing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

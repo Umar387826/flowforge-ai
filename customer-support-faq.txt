@@ -1,0 +1,6 @@
+﻿FlowForge AI - Customer Support FAQ
+
+FlowForge AI is an AI automation platform.
+Users can create AI agents, manage knowledge bases, upload documents, automate workflows, and capture customer leads.
+
+For customer support, users can ask questions about products, services, and business information.

@@ -1,0 +1,95 @@
+name: FlowForge AI CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: flowforge
+          POSTGRES_USER: flowforge_owner
+          POSTGRES_PASSWORD: owner_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Lint with Ruff
+        run: ruff check backend
+      - name: Init Postgres Roles and Run Migrations
+        env:
+          PGPASSWORD: owner_ci_password
+        run: |
+          psql -h localhost -U flowforge_owner -d flowforge -f infra/postgres/init.sql
+          cd backend
+          POSTGRES_HOST=localhost POSTGRES_APP_USER=flowforge_owner POSTGRES_APP_PASSWORD=owner_ci_password \
+            TENANT_SIGNING_KEY=ci-signing-key-32-chars-minimum-123456 \
+            DJANGO_SETTINGS_MODULE=config.settings.test python manage.py migrate --noinput
+      - name: Run Django System Checks & Pytest Suite
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_APP_USER: flowforge_app
+          POSTGRES_APP_PASSWORD: flowforge_app_dev_pass
+          REDIS_URL: redis://localhost:6379/0
+          CELERY_BROKER_URL: redis://localhost:6379/1
+          CHANNEL_LAYER_REDIS_URL: redis://localhost:6379/3
+          USE_REDIS_IN_TESTS: "1"
+          TENANT_SIGNING_KEY: ci-signing-key-32-chars-minimum-123456
+          DJANGO_SETTINGS_MODULE: config.settings.test
+        run: |
+          cd backend
+          python manage.py check
+          pytest
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript typecheck
+        run: npm run lint
+      - name: Run Vitest unit & component tests
+        run: npx vitest run
+      - name: Production Vite build
+        run: npm run build
+
+  docker-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: docker compose config -q
+      - name: Build backend & frontend images
+        run: docker compose build backend frontend
