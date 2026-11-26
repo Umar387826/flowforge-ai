@@ -16,6 +16,7 @@ from apps.common.permissions import IsOrganizationManager, IsOrganizationMember
 from apps.knowledge.embeddings import EmbeddingProviderError
 from apps.knowledge.models import KnowledgeBase
 from apps.knowledge.rag import build_grounded_rag_context, retrieve_relevant_chunks
+from apps.leads.services import capture_lead_from_tool
 
 
 class AIAgentSerializer(serializers.ModelSerializer):
@@ -120,9 +121,23 @@ class AIAgentViewSet(TenantModelViewSet):
         record_usage(request.organization, UsageRecord.Metric.AI_REQUESTS, 1)
         record_usage(request.organization, UsageRecord.Metric.TOKENS, total_tokens)
 
+        captured_lead_ids = []
+        for tc in llm_resp.tool_calls:
+            if tc.get("name") == "capture_lead":
+                lead = capture_lead_from_tool(
+                    organization=request.organization,
+                    tool_input=tc.get("input") or {},
+                )
+                if lead:
+                    captured_lead_ids.append(str(lead.id))
+
+        answer = llm_resp.content
+        if not answer and captured_lead_ids:
+            answer = "Lead captured successfully."
+
         return Response(
             {
-                "answer": llm_resp.content,
+                "answer": answer,
                 "citations": citations,
                 "token_usage": {
                     "input_tokens": llm_resp.input_tokens,
@@ -130,5 +145,6 @@ class AIAgentViewSet(TenantModelViewSet):
                     "total_tokens": total_tokens,
                 },
                 "tool_calls": llm_resp.tool_calls,
+                "captured_lead_ids": captured_lead_ids,
             }
         )

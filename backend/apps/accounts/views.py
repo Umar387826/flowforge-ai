@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import id_token
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -74,6 +76,88 @@ class LoginView(APIView):
                 "tokens": data["tokens"],
             }
         )
+
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        credential = request.data.get("credential") or request.data.get("id_token")
+        client_id = getattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "")
+
+        if not client_id:
+            return Response(
+                {"detail": "Google Login is not configured on the server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not credential:
+            return Response(
+                {"detail": "Google credential is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = id_token.verify_oauth2_token(
+                credential,
+                GoogleRequest(),
+                audience=client_id,
+            )
+        except (ValueError, Exception):
+            return Response(
+                {"detail": "Invalid Google credential."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        email = (payload.get("email") or "").strip().lower()
+        email_verified = payload.get("email_verified") is True
+
+        if not email or not email_verified:
+            return Response(
+                {"detail": "Google account must have a verified email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            user = User.objects.select_for_update().filter(email__iexact=email).first()
+
+            if user and not user.is_active:
+                return Response(
+                    {"detail": "Account is disabled."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if not user:
+                user = User.objects.create_user(
+                    email=email,
+                    full_name=(payload.get("name") or email.split("@")[0])[:150],
+                    avatar_url=payload.get("picture") or "",
+                    email_verified=True,
+                )
+            else:
+                update_fields = []
+                if not user.email_verified:
+                    user.email_verified = True
+                    update_fields.append("email_verified")
+                if not user.avatar_url and payload.get("picture"):
+                    user.avatar_url = payload["picture"]
+                    update_fields.append("avatar_url")
+                if update_fields:
+                    user.save(update_fields=update_fields + ["updated_at"])
+
+            refresh = RefreshToken.for_user(user)
+
+        organizations = _get_user_organizations(user)
+
+        return Response({
+            "user": UserSerializer(user).data,
+            "organizations": organizations,
+            "tokens": {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+        })
 
 
 class LogoutView(APIView):

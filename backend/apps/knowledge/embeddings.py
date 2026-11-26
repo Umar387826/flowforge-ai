@@ -1,6 +1,9 @@
 ﻿
 from abc import ABC, abstractmethod
+import json
 import time
+import urllib.error
+import urllib.request
 
 from django.conf import settings
 from openai import (
@@ -25,6 +28,104 @@ class BaseEmbeddingProvider(ABC):
     @abstractmethod
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         raise NotImplementedError
+
+
+class OllamaEmbeddingProvider(BaseEmbeddingProvider):
+    def __init__(self, model: str | None = None):
+        self.base_url = getattr(
+            settings,
+            "OLLAMA_BASE_URL",
+            "http://host.docker.internal:11434",
+        ).rstrip("/")
+
+        configured_model = getattr(
+            settings,
+            "OLLAMA_EMBEDDING_MODEL",
+            "nomic-embed-text",
+        )
+
+        # Existing KnowledgeBase records may still contain the old
+        # OpenAI default. Map that legacy value to the local model.
+        if not model or model == getattr(
+            settings,
+            "OPENAI_EMBEDDING_MODEL",
+            "text-embedding-3-small",
+        ):
+            model = configured_model
+
+        self.model = model
+        self.timeout = 60
+
+    def _embed_one(self, text: str) -> list[float]:
+        payload = json.dumps({
+            "model": self.model,
+            "prompt": text,
+        }).encode("utf-8")
+
+        request = urllib.request.Request(
+            f"{self.base_url}/api/embeddings",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=self.timeout,
+            ) as response:
+                result = json.loads(response.read().decode("utf-8"))
+
+            vector = result.get("embedding")
+
+            if not isinstance(vector, list) or not vector:
+                raise EmbeddingProviderError(
+                    "Ollama returned an empty or invalid embedding."
+                )
+
+            if len(vector) != 768:
+                raise EmbeddingProviderError(
+                    f"Expected 768 embedding dimensions, received {len(vector)}."
+                )
+
+            return vector
+
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+
+            if exc.code == 429 or exc.code >= 500:
+                raise TransientEmbeddingProviderError(
+                    f"Ollama temporary HTTP error {exc.code}: {detail}"
+                ) from exc
+
+            raise EmbeddingProviderError(
+                f"Ollama HTTP error {exc.code}: {detail}"
+            ) from exc
+
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise TransientEmbeddingProviderError(
+                f"Cannot connect to Ollama at {self.base_url}: {exc}"
+            ) from exc
+
+        except EmbeddingProviderError:
+            raise
+
+        except Exception as exc:
+            raise EmbeddingProviderError(
+                f"Ollama embedding request failed: {exc}"
+            ) from exc
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        vectors = []
+
+        for text in texts:
+            cleaned = text.replace("\x00", " ").strip() or " "
+            vectors.append(self._embed_one(cleaned))
+
+        return vectors
 
 
 class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
@@ -132,6 +233,18 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
 def get_embedding_provider(
     model: str | None = None,
 ) -> BaseEmbeddingProvider:
-    return OpenAIEmbeddingProvider(model=model)
+    provider_name = getattr(
+        settings,
+        "EMBEDDING_PROVIDER",
+        "ollama",
+    ).lower()
 
+    if provider_name == "ollama":
+        return OllamaEmbeddingProvider(model=model)
 
+    if provider_name == "openai":
+        return OpenAIEmbeddingProvider(model=model)
+
+    raise EmbeddingProviderError(
+        f"Unsupported embedding provider: {provider_name}"
+    )

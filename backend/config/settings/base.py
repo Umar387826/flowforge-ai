@@ -1,4 +1,4 @@
-from datetime import timedelta
+﻿from datetime import timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -218,6 +218,16 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_DEFAULT_MODEL = os.environ.get("ANTHROPIC_DEFAULT_MODEL", "claude-3-5-sonnet-20241022")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_EMBEDDING_MODEL = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+OLLAMA_BASE_URL = os.environ.get(
+    "OLLAMA_BASE_URL",
+    "http://host.docker.internal:11434",
+)
+OLLAMA_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "qwen2.5:3b")
+OLLAMA_EMBEDDING_MODEL = os.environ.get(
+    "OLLAMA_EMBEDDING_MODEL",
+    "nomic-embed-text",
+)
+EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "ollama")
 
 # External Integrations
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
@@ -310,3 +320,4 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+

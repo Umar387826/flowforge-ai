@@ -6,7 +6,7 @@ from apps.common.models import TenantScopedModel
 class KnowledgeBase(TenantScopedModel):
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, default="")
-    embedding_model = models.CharField(max_length=80, default="text-embedding-3-small")
+    embedding_model = models.CharField(max_length=80, default="nomic-embed-text")
     chunk_size = models.IntegerField(default=800)
     chunk_overlap = models.IntegerField(default=120)
 
@@ -29,7 +29,7 @@ class DocumentChunk(TenantScopedModel):
     content = models.TextField()
     token_count = models.IntegerField(default=0)
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = VectorField(dimensions=1536)
+    embedding = VectorField(dimensions=768)
 
     class Meta:
         ordering = ["document", "chunk_index"]

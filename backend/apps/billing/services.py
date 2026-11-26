@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import exceptions
 import stripe
 from apps.billing.models import InvoiceHistory, StripeWebhookEvent, Subscription, UsageRecord
-from apps.common.tenancy import resolve_subscription_org_id, tenant_context
+from apps.common.tenancy import get_active_actor_id, resolve_subscription_org_id, tenant_context
 
 
 class QuotaExceededError(exceptions.APIException):
@@ -99,15 +99,22 @@ def enforce_quota(organization, metric: str, increment: int = 1) -> None:
 def record_usage(organization, metric: str, quantity: int = 1) -> None:
     if quantity <= 0:
         return
-    ym = current_period_ym()
-    record, created = UsageRecord.objects.get_or_create(
-        organization=organization,
-        period_ym=ym,
-        metric=metric,
-        defaults={"quantity": quantity},
-    )
-    if not created:
-        UsageRecord.objects.filter(pk=record.pk).update(quantity=F("quantity") + quantity)
+
+    actor_id = get_active_actor_id()
+
+    # Establish signed tenant authorization for usage writes.
+    with tenant_context(organization.id, actor_id=actor_id):
+        ym = current_period_ym()
+        record, created = UsageRecord.objects.get_or_create(
+            organization=organization,
+            period_ym=ym,
+            metric=metric,
+            defaults={"quantity": quantity},
+        )
+        if not created:
+            UsageRecord.objects.filter(pk=record.pk).update(
+                quantity=F("quantity") + quantity
+            )
 
 
 def create_checkout_session(organization, plan_tier: str, user_email: str) -> dict:

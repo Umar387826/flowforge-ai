@@ -18,7 +18,7 @@ from apps.common.tenancy import resolve_agent_org_by_embed_key, tenant_context
 from apps.conversations.models import Conversation, Message
 from apps.knowledge.embeddings import EmbeddingProviderError
 from apps.knowledge.rag import build_grounded_rag_context, retrieve_relevant_chunks
-from apps.leads.models import Lead
+from apps.leads.services import capture_lead_from_tool
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -140,27 +140,11 @@ class ConversationViewSet(TenantModelViewSet):
 
         for tc in llm_resp.tool_calls:
             if tc.get("name") == "capture_lead":
-                inp = tc.get("input") or {}
-                email = str(inp.get("email", "")).strip().lower()
-                if email:
-                    lead, _ = Lead.objects.update_or_create(
-                        organization=request.organization,
-                        email=email,
-                        defaults={
-                            "full_name": inp.get("full_name", ""),
-                            "phone": inp.get("phone", ""),
-                            "company": inp.get("company", ""),
-                            "preferences": inp.get("preferences") or {},
-                            "source_conversation": conv,
-                        },
-                    )
-                    from apps.workflows.engine import dispatch_workflows_for_event
-
-                    dispatch_workflows_for_event(
-                        organization_id=str(request.organization.id),
-                        trigger_type="lead_captured",
-                        payload={"lead_id": str(lead.id), "email": lead.email, "full_name": lead.full_name},
-                    )
+                capture_lead_from_tool(
+                    organization=request.organization,
+                    tool_input=tc.get("input") or {},
+                    source_conversation=conv,
+                )
 
         return Response(
             {

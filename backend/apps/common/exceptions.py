@@ -1,6 +1,11 @@
+
+import logging
+
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
+
+logger = logging.getLogger(__name__)
 
 
 def flowforge_exception_handler(exc, context):
@@ -11,6 +16,7 @@ def flowforge_exception_handler(exc, context):
     if response is not None:
         detail = response.data
         message = "Request failed"
+
         if isinstance(detail, dict) and "detail" in detail:
             message = str(detail["detail"])
         elif isinstance(detail, list) and detail:
@@ -25,6 +31,12 @@ def flowforge_exception_handler(exc, context):
             }
         }
         return response
+
+    logger.error(
+        "Unhandled API exception. Correlation ID: %s",
+        correlation_id,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
 
     return Response(
         {

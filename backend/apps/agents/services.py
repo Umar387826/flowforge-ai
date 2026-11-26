@@ -298,9 +298,19 @@ class OpenAILLMProvider(BaseLLMProvider):
 
 
 def get_llm_provider(provider_name: str) -> BaseLLMProvider:
+    if provider_name == "ollama":
+        from apps.agents.ollama_provider import OllamaLLMProvider
+        return OllamaLLMProvider()
+
     if provider_name == "openai":
         return OpenAILLMProvider()
-    return AnthropicLLMProvider()
+
+    if provider_name == "anthropic":
+        return AnthropicLLMProvider()
+
+    raise LLMProviderError(
+        f"Unsupported LLM provider: {provider_name}"
+    )
 
 
 def prepare_chat_messages(history_messages: list[dict]) -> list[dict]:

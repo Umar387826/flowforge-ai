@@ -130,6 +130,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
         VITE_WS_URL: ${VITE_WS_URL:-/ws}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
     container_name: flowforge_frontend
 
   nginx:
@@ -151,3 +152,4 @@ volumes:
     external: true
     name: flowai_media_volume
   static_volume:
+

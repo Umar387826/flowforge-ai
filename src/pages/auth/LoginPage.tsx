@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { GoogleLogin } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, ShieldCheck, Sparkles, Workflow } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -6,7 +7,7 @@ import { FlowForgeApiError } from '../../api/client';
 import { ErrorBanner } from '../../components/ui/StateViews';
 
 export const LoginPage: React.FC = () => {
-  const { login, backendReachable } = useAuth();
+  const { login, loginWithGoogle, backendReachable } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -187,6 +188,43 @@ export const LoginPage: React.FC = () => {
                 {!submitting && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>
+
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[var(--ff-border)]" />
+              <span className="text-xs text-[var(--ff-text-muted)]">OR CONTINUE WITH</span>
+              <div className="h-px flex-1 bg-[var(--ff-border)]" />
+            </div>
+
+            {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={async (response) => {
+                    if (!response.credential) {
+                      setError('Google did not return a valid credential.');
+                      return;
+                    }
+                    setError('');
+                    setSubmitting(true);
+                    try {
+                      await loginWithGoogle(response.credential);
+                      navigate('/dashboard');
+                    } catch (err) {
+                      setError(err instanceof FlowForgeApiError ? err.message : 'Google sign-in failed.');
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                  onError={() => setError('Google sign-in could not be completed. Please try again.')}
+                  text="continue_with"
+                  shape="rectangular"
+                  width="320"
+                />
+              </div>
+            ) : (
+              <p className="text-center text-xs text-[var(--ff-text-muted)]">
+                Google Login requires VITE_GOOGLE_CLIENT_ID configuration.
+              </p>
+            )}
 
             <p className="mt-6 border-t border-[var(--ff-border)] pt-5 text-center text-sm text-[var(--ff-text-secondary)]">
               New organization?{' '}

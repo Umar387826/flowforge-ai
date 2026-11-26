@@ -32,7 +32,7 @@ export interface AIAgent {
   name: string;
   description: string;
   system_instructions: string;
-  llm_provider: 'anthropic' | 'openai';
+  llm_provider: 'anthropic' | 'openai' | 'ollama';
   model_name: string;
   temperature: number;
   max_tokens: number;

@@ -22,3 +22,11 @@ backups/*.sql.gz
 .env
 
 docker-compose.yml.backup
+
+# Local backups and temporary archives
+*.bak
+*.backup
+*.backup-*
+*.zip
+lead-capture-backup-*/
+apply_lead_capture_patch.py

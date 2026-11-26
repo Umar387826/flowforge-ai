@@ -21,3 +21,4 @@ class DocumentChunkingTests(SimpleTestCase):
         chunks = normalize_and_chunk_text(text, chunk_size=80, chunk_overlap=10)
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(len(chunk) <= 80 for chunk in chunks))
+

@@ -18,6 +18,7 @@ interface AuthContextValue {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   register: (payload: {
     email: string;
     full_name: string;
@@ -111,6 +112,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setBackendReachable(true);
   };
 
+  const loginWithGoogle = async (credential: string) => {
+    const res = await api.googleLogin(credential);
+    setStoredTokens(res.tokens);
+    setUser(res.user);
+    setOrganizations(res.organizations);
+    const firstOrg = res.organizations[0] || null;
+    if (firstOrg) {
+      setStoredOrgId(firstOrg.id);
+      setActiveOrgId(firstOrg.id);
+    } else {
+      setStoredOrgId(null);
+      setActiveOrgId(null);
+    }
+    setBackendReachable(true);
+  };
+
   const register = async (payload: {
     email: string;
     full_name: string;
@@ -164,6 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         theme,
         toggleTheme,
         login,
+        loginWithGoogle,
         register,
         logout,
         switchOrganization,

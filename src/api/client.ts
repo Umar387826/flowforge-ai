@@ -176,6 +176,11 @@ export const api = {
       '/auth/login/',
       { method: 'POST', body: JSON.stringify(payload), skipAuth: true },
     ),
+  googleLogin: (credential: string) =>
+    apiRequest<{ user: User; organizations: Organization[]; tokens: { access: string; refresh: string } }>(
+      '/auth/google/',
+      { method: 'POST', body: JSON.stringify({ credential }), skipAuth: true },
+    ),
   register: (payload: { email: string; full_name: string; password: string; organization_name?: string }) =>
     apiRequest<{ user: User; organizations: Organization[]; tokens: { access: string; refresh: string } }>(
       '/auth/register/',

@@ -21,7 +21,7 @@ from apps.common.tenancy import (
 from apps.conversations.models import Conversation, Message
 from apps.knowledge.embeddings import EmbeddingProviderError
 from apps.knowledge.rag import build_grounded_rag_context, retrieve_relevant_chunks
-from apps.leads.models import Lead
+from apps.leads.services import capture_lead_from_tool
 from apps.organizations.models import OrganizationMembership
 
 logger = structlog.get_logger(__name__)
@@ -141,33 +141,13 @@ def _save_assistant_message_and_process_tools(
         captured_lead_id = None
         for tc in tool_calls:
             if tc.get("name") == "capture_lead":
-                inp = tc.get("input") or {}
-                email = str(inp.get("email", "")).strip().lower()
-                if email:
-                    lead, _ = Lead.objects.update_or_create(
-                        organization=conv.organization,
-                        email=email,
-                        defaults={
-                            "full_name": inp.get("full_name", ""),
-                            "phone": inp.get("phone", ""),
-                            "company": inp.get("company", ""),
-                            "preferences": inp.get("preferences") or {},
-                            "source_conversation": conv,
-                        },
-                    )
+                lead = capture_lead_from_tool(
+                    organization=conv.organization,
+                    tool_input=tc.get("input") or {},
+                    source_conversation=conv,
+                )
+                if lead:
                     captured_lead_id = str(lead.id)
-                    from apps.workflows.engine import dispatch_workflows_for_event
-
-                    dispatch_workflows_for_event(
-                        organization_id=str(conv.organization_id),
-                        trigger_type="lead_captured",
-                        payload={
-                            "lead_id": str(lead.id),
-                            "email": lead.email,
-                            "full_name": lead.full_name,
-                            "preferences": lead.preferences,
-                        },
-                    )
 
         return {"assistant_message_id": str(msg.id), "captured_lead_id": captured_lead_id}
 

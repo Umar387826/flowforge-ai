@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Bot, MessageSquare, Plus, Power, Trash2, X } from 'lucide-react';
 import { api, FlowForgeApiError } from '../../api/client';
@@ -5,6 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 import type { AIAgent, KnowledgeBase } from '../../types/api';
 import { ConfirmDialog, EmptyState, ErrorBanner, LoadingSkeleton, SuccessBanner } from '../../components/ui/StateViews';
 import { StatusText } from '../../components/ui/StatusText';
+
+type LLMProvider = 'anthropic' | 'openai' | 'ollama';
 
 export const AgentsSection: React.FC = () => {
   const { activeOrg } = useAuth();
@@ -21,8 +24,8 @@ export const AgentsSection: React.FC = () => {
   const [systemInstructions, setSystemInstructions] = useState(
     'You are Property Assistant. Answer questions using only the provided property brochures and collect buyer contact details when appropriate.',
   );
-  const [llmProvider, setLlmProvider] = useState<'anthropic' | 'openai'>('anthropic');
-  const [modelName, setModelName] = useState('claude-3-5-sonnet-20241022');
+  const [llmProvider, setLlmProvider] = useState<LLMProvider>('ollama');
+  const [modelName, setModelName] = useState('qwen2.5:3b');
   const [temperature, setTemperature] = useState(0.2);
   const [maxTokens, setMaxTokens] = useState(1024);
   const [selectedKbIds, setSelectedKbIds] = useState<string[]>([]);
@@ -54,10 +57,12 @@ export const AgentsSection: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
     if (!name.trim()) {
       setError('Agent name is required.');
       return;
     }
+
     try {
       await api.createAgent({
         name: name.trim(),
@@ -70,6 +75,7 @@ export const AgentsSection: React.FC = () => {
         knowledge_base_ids: selectedKbIds,
         enabled_tools: captureLeadEnabled ? ['capture_lead'] : [],
       });
+
       setName('');
       setDescription('');
       setShowForm(false);
@@ -91,6 +97,7 @@ export const AgentsSection: React.FC = () => {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+
     try {
       await api.deleteAgent(deleteTarget.id);
       setDeleteTarget(null);
@@ -104,9 +111,11 @@ export const AgentsSection: React.FC = () => {
   const handleTestQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testAgent || !testPrompt.trim()) return;
+
     setTesting(true);
     setError('');
     setTestResult(null);
+
     try {
       const res = await api.testAgentQuery(testAgent.id, testPrompt.trim());
       setTestResult({ answer: res.answer, citations: res.citations });
@@ -114,6 +123,22 @@ export const AgentsSection: React.FC = () => {
       setError(err instanceof FlowForgeApiError ? err.message : 'Agent query failed.');
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleProviderChange = (value: LLMProvider) => {
+    setLlmProvider(value);
+
+    switch (value) {
+      case 'anthropic':
+        setModelName('claude-3-5-sonnet-20241022');
+        break;
+      case 'openai':
+        setModelName('gpt-4o-mini');
+        break;
+      case 'ollama':
+        setModelName('qwen2.5:3b');
+        break;
     }
   };
 
@@ -126,6 +151,7 @@ export const AgentsSection: React.FC = () => {
             Configure LLM providers, system instructions, knowledge bases, and structured lead capture tools.
           </p>
         </div>
+
         <button type="button" onClick={() => setShowForm((s) => !s)} className="ff-btn ff-btn-primary">
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           <span>{showForm ? 'Close Form' : 'New AI Agent'}</span>
@@ -138,14 +164,14 @@ export const AgentsSection: React.FC = () => {
       {showForm && (
         <form onSubmit={handleCreate} className="ff-card-padded space-y-4">
           <div className="flex items-center justify-between border-b border-[var(--ff-border)] pb-3">
-            <h2 className="font-display text-base font-semibold text-[var(--ff-text-primary)]">Create AI Agent</h2>
+            <h2 className="font-display text-base font-semibold text-[var(--ff-text-primary)]">
+              Create AI Agent
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label htmlFor="agent-name" className="ff-label">
-                Agent Name
-              </label>
+              <label htmlFor="agent-name" className="ff-label">Agent Name</label>
               <input
                 id="agent-name"
                 type="text"
@@ -156,28 +182,23 @@ export const AgentsSection: React.FC = () => {
                 className="ff-input"
               />
             </div>
+
             <div>
-              <label htmlFor="agent-provider" className="ff-label">
-                LLM Provider
-              </label>
+              <label htmlFor="agent-provider" className="ff-label">LLM Provider</label>
               <select
                 id="agent-provider"
                 value={llmProvider}
-                onChange={(e) => {
-                  const val = e.target.value as 'anthropic' | 'openai';
-                  setLlmProvider(val);
-                  setModelName(val === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'gpt-4o-mini');
-                }}
+                onChange={(e) => handleProviderChange(e.target.value as LLMProvider)}
                 className="ff-select"
               >
+                <option value="ollama">Ollama (Local AI)</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI</option>
               </select>
             </div>
+
             <div>
-              <label htmlFor="agent-model" className="ff-label">
-                Model
-              </label>
+              <label htmlFor="agent-model" className="ff-label">Model</label>
               <input
                 id="agent-model"
                 type="text"
@@ -186,11 +207,10 @@ export const AgentsSection: React.FC = () => {
                 className="ff-input font-mono"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="agent-temp" className="ff-label">
-                  Temperature
-                </label>
+                <label htmlFor="agent-temp" className="ff-label">Temperature</label>
                 <input
                   id="agent-temp"
                   type="number"
@@ -202,10 +222,9 @@ export const AgentsSection: React.FC = () => {
                   className="ff-input font-mono tabular-nums"
                 />
               </div>
+
               <div>
-                <label htmlFor="agent-tokens" className="ff-label">
-                  Max Tokens
-                </label>
+                <label htmlFor="agent-tokens" className="ff-label">Max Tokens</label>
                 <input
                   id="agent-tokens"
                   type="number"
@@ -220,9 +239,7 @@ export const AgentsSection: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="agent-desc" className="ff-label">
-              Description
-            </label>
+            <label htmlFor="agent-desc" className="ff-label">Description</label>
             <input
               id="agent-desc"
               type="text"
@@ -234,9 +251,7 @@ export const AgentsSection: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="agent-instructions" className="ff-label">
-              System Instructions
-            </label>
+            <label htmlFor="agent-instructions" className="ff-label">System Instructions</label>
             <textarea
               id="agent-instructions"
               rows={3}
@@ -392,6 +407,7 @@ export const AgentsSection: React.FC = () => {
               Close
             </button>
           </div>
+
           <form onSubmit={handleTestQuery} className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
@@ -404,9 +420,12 @@ export const AgentsSection: React.FC = () => {
               {testing ? 'Running...' : 'Ask Agent'}
             </button>
           </form>
+
           {testResult && (
             <div className="space-y-2 rounded-lg border border-[var(--ff-border)] bg-[var(--ff-bg-subtle)] p-4 text-sm">
-              <p className="whitespace-pre-wrap leading-relaxed text-[var(--ff-text-primary)]">{testResult.answer}</p>
+              <p className="whitespace-pre-wrap leading-relaxed text-[var(--ff-text-primary)]">
+                {testResult.answer}
+              </p>
               {testResult.citations.length > 0 && (
                 <p className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--ff-teal-text)]">
                   <BookOpen className="h-3.5 w-3.5" />
